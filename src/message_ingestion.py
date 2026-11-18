@@ -229,13 +229,20 @@ class MessageIngestor:
             return None
 
     def _invalidate_cache(self, chat_id: int) -> None:
-        """Best-effort cache invalidation for a chat after a successful store."""
+        """Best-effort search-cache invalidation after a successful store.
+
+        ``MessageSearch`` caches results under ``search:{scope}:{query}:{limit}``
+        keys, where scope is ``all`` for unscoped queries and the chat id for
+        chat-scoped ones. Both prefixes are dropped so a newly ingested message
+        can never be hidden behind a stale cached result set.
+        """
 
         invalidate = getattr(self.cache, "invalidate", None)
         if not callable(invalidate):
             return
-        try:
-            invalidate(f"chat:{chat_id}")
-        except Exception:
-            # The cache is an optional optimization; never fail ingestion for it.
-            return
+        for prefix in (f"search:{chat_id}:", "search:all:"):
+            try:
+                invalidate(prefix)
+            except Exception:
+                # The cache is an optional optimization; never fail ingestion.
+                return
