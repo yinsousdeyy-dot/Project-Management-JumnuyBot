@@ -9,13 +9,23 @@ from __future__ import annotations
 import pytest
 
 from src.config import Database, Settings
-from src.group_connector import GroupConnector
+from src.group_connector import CONSENT_PROMPT, GroupConnector
 from src.models import Message
 
 CHAT_ID = -1001234567890
 OTHER_CHAT_ID = -1009876543210
 ADMIN_ID = 1
 NON_ADMIN_ID = 42
+
+THAI_RANGE = (0x0E00, 0x0E7F)
+KHMER_RANGE = (0x1780, 0x17FF)
+
+
+def _has_chars_in_range(text: str, bounds: tuple[int, int]) -> bool:
+    """Return whether ``text`` contains any code point within ``bounds``."""
+
+    low, high = bounds
+    return any(low <= ord(char) <= high for char in text)
 
 
 @pytest.fixture()
@@ -139,3 +149,45 @@ def test_consent_prompt_mentions_authorize_and_chat(
 
     assert "/authorize" in prompt
     assert str(CHAT_ID) in prompt
+    # The bilingual prompt mentions /revoke once in Khmer and once in the
+    # English parenthetical, so the sentence itself must appear exactly once.
+    assert prompt.count("The group owner can revoke this at any time") == 1
+    assert prompt.count("(The group owner can revoke this at any time with /revoke).") == 1
+
+
+# -- localization: Khmer + English only, no Thai ---------------------------
+
+
+def test_consent_prompt_has_no_thai_characters() -> None:
+    """The consent prompt must not contain Thai code points (U+0E00–U+0E7F)."""
+
+    assert _has_chars_in_range(CONSENT_PROMPT, THAI_RANGE) is False
+
+
+def test_consent_prompt_contains_khmer_characters() -> None:
+    """The consent prompt must contain Khmer code points (U+1780–U+17FF)."""
+
+    assert _has_chars_in_range(CONSENT_PROMPT, KHMER_RANGE) is True
+
+
+def test_consent_prompt_keeps_command_hints() -> None:
+    """The consent prompt must still tell users about /authorize and /revoke."""
+
+    assert "/authorize" in CONSENT_PROMPT
+    assert "/revoke" in CONSENT_PROMPT
+
+
+def test_non_admin_refusals_have_no_thai_characters(
+    connector: GroupConnector, db: Database
+) -> None:
+    """Both non-admin refusal messages must be free of Thai code points."""
+
+    connector.on_bot_added(CHAT_ID, "Class 3A", ADMIN_ID)
+
+    authorize = connector.on_authorize(CHAT_ID, NON_ADMIN_ID)
+    revoke = connector.on_revoke(CHAT_ID, NON_ADMIN_ID)
+
+    assert authorize["ok"] is False
+    assert revoke["ok"] is False
+    assert _has_chars_in_range(str(authorize["message"]), THAI_RANGE) is False
+    assert _has_chars_in_range(str(revoke["message"]), THAI_RANGE) is False
