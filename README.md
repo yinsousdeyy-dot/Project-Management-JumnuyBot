@@ -44,6 +44,41 @@ report without contacting Telegram or Rayu.
 python main.py
 ```
 
+## Running the bot
+
+Install the pinned dependencies, then start the bot with long polling:
+
+```bash
+pip install -r requirements.txt
+python -m src.main_bot
+```
+
+`python -m src.main_bot` requires the `TELEGRAM_BOT_TOKEN` environment
+variable. Provide it by exporting it in your shell or by placing it in `.env`
+(see `.env.example` for the full list of variables):
+
+```bash
+export TELEGRAM_BOT_TOKEN=...   # or set it in .env
+```
+
+The token is only needed at run time. Importing the modules and running the
+tests needs no token, and `python main.py` remains an offline demo: it creates
+the five SQLite tables and makes no Telegram or AI calls.
+
+### Commands
+
+| Command | Purpose |
+| --- | --- |
+| `/start` | Greet the chat and show a short usage hint |
+| `/ask <question>` | Search ingested messages and reply with cited sources |
+| `/today` | Summarize today's announcements with cited sources |
+| `/authorize` | Admin-only: approve the group so the bot may read it |
+| `/revoke` | Admin-only: revoke the group's authorization |
+
+The bot must be added to a group and approved by a group admin before it
+reads or answers anything. In groups, plain questions are only answered when
+the bot is `@mention`ed or addressed with `/ask`.
+
 ## Environment variables
 
 | Variable | Default | Meaning |
