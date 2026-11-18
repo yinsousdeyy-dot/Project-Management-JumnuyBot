@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 """Telegram class-group connection handling."""
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -51,6 +52,8 @@ async def revoke_group_command(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     await update.message.reply_text("⏸️ Group indexing has been paused for privacy (AC5).")
 =======
+=======
+>>>>>>> 5dcbce767949b689bd1eb487cd64189cc68a5e3a
 """Telegram group consent flow (SCRUM-31).
 
 JumnuyBot only stores and answers questions about a Telegram group after an
@@ -238,4 +241,7 @@ class GroupConnector:
                 "existing messages are kept."
             ),
         }
+<<<<<<< HEAD
 >>>>>>> 2d01164c5c65fbe09080407175e488694b742d20
+=======
+>>>>>>> 5dcbce767949b689bd1eb487cd64189cc68a5e3a
