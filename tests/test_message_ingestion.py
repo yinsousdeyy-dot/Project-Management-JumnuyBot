@@ -310,21 +310,15 @@ def test_cache_without_invalidate_is_tolerated(db: Database) -> None:
 
 
 def test_ingestion_invalidates_real_search_cache(db: Database) -> None:
-    """A newly ingested message must appear in an already-populated search.
+    """A newly ingested message must appear in an already-populated search."""
 
-    The search module lands on its own branch, so this regression test skips
-    (instead of failing at import time) when it is not part of the checkout.
-    """
-
-    message_search = pytest.importorskip(
-        "src.message_search", reason="search module lives on its own branch"
-    )
+    from src.message_search import MessageSearch
 
     _authorize(db)
     MessageIngestor(db).ingest(
         CHAT_ID, 30, "deadline is friday", "2026-11-18T00:00:00+00:00"
     )
-    search = message_search.MessageSearch(db)
+    search = MessageSearch(db)
 
     # Populate both the global and chat-scoped caches first.
     before = search.search("deadline")
