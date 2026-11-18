@@ -69,6 +69,9 @@ _ADDED_STATUSES = frozenset({"member", "administrator"})
 #: Statuses that mean the bot was removed from the chat.
 _REMOVED_STATUSES = frozenset({"left", "kicked"})
 
+#: Chat-member statuses that count as a group administrator.
+_GROUP_ADMIN_STATUSES = frozenset({"creator", "administrator"})
+
 WELCOME_TEXT = (
     "Welcome to JumnuyBot! I help your class group find messages and "
     "announcements.\n\n"
@@ -239,6 +242,33 @@ def _sender_id(update: Update) -> int | None:
     user = getattr(update, "effective_user", None)
     user_id = getattr(user, "id", None)
     return user_id if isinstance(user_id, int) and not isinstance(user_id, bool) else None
+
+
+async def _is_chat_admin(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> bool:
+    """Return True only when the sender is a creator/administrator of the chat.
+
+    Telegram's ``get_chat_member`` is the source of truth. Every failure mode
+    (network error, ``Bad Request``, missing ids) is treated as *not* an
+    administrator so that authorize/revoke simply fall back to the configured
+    ``admin_user_ids`` allow-list. This helper never raises.
+    """
+
+    chat_id = _chat_id_of(update)
+    user_id = _sender_id(update)
+    if chat_id is None or user_id is None:
+        return False
+
+    try:
+        member = await context.bot.get_chat_member(
+            chat_id=chat_id, user_id=user_id
+        )
+    except Exception:  # noqa: BLE001 - any failure means "not an admin"
+        logger.debug("Could not resolve chat member status for chat %s", chat_id)
+        return False
+
+    return _status(getattr(member, "status", "")) in _GROUP_ADMIN_STATUSES
 
 
 def _bot_username(services: "BotServices") -> str:
@@ -537,7 +567,13 @@ async def on_approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     actor = getattr(query, "from_user", None)
     actor_id = getattr(actor, "id", 0) or 0
 
-    result = await services.call(services.groups.on_authorize, chat_id, actor_id)
+    is_group_admin = await _is_chat_admin(update, context)
+    result = await services.call(
+        services.groups.on_authorize,
+        chat_id,
+        actor_id,
+        actor_is_group_admin=is_group_admin,
+    )
     ok = bool(result.get("ok"))
     message = str(result.get("message", ""))
 
@@ -555,8 +591,12 @@ async def cmd_authorize(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     chat_id = _chat_id_of(update)
     if chat_id is None:
         return
+    is_group_admin = await _is_chat_admin(update, context)
     result = await services.call(
-        services.groups.on_authorize, chat_id, _sender_id(update)
+        services.groups.on_authorize,
+        chat_id,
+        _sender_id(update),
+        actor_is_group_admin=is_group_admin,
     )
     await _reply(context, chat_id, str(result.get("message", "")))
 
@@ -568,8 +608,12 @@ async def cmd_revoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     chat_id = _chat_id_of(update)
     if chat_id is None:
         return
+    is_group_admin = await _is_chat_admin(update, context)
     result = await services.call(
-        services.groups.on_revoke, chat_id, _sender_id(update)
+        services.groups.on_revoke,
+        chat_id,
+        _sender_id(update),
+        actor_is_group_admin=is_group_admin,
     )
     await _reply(context, chat_id, str(result.get("message", "")))
 

@@ -155,6 +155,20 @@ def make_callback_update(
     return update
 
 
+def make_chat_member(status: str) -> SimpleNamespace:
+    """Return a stand-in for Telegram's ChatMember carrying ``status``."""
+
+    return SimpleNamespace(status=status)
+
+
+def bot_with_member_status(status: str) -> AsyncMock:
+    """Return a mocked bot whose ``get_chat_member`` reports ``status``."""
+
+    bot = make_bot()
+    bot.get_chat_member = AsyncMock(return_value=make_chat_member(status))
+    return bot
+
+
 def sent_text(context: SimpleNamespace) -> str:
     """Concatenate every text sent through the mocked bot."""
 
@@ -525,6 +539,131 @@ def test_revoke_command_is_admin_only_and_keeps_messages(services: Any) -> None:
     )
     assert services.db.is_group_authorized(CHAT_ID) is True
     assert len(services.db.list_messages(CHAT_ID)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Group-admin authorization (SCRUM-45)
+# ---------------------------------------------------------------------------
+
+
+def test_group_creator_can_authorize_via_command(services: Any) -> None:
+    """A non-configured group creator may authorize with /authorize."""
+
+    services.groups.on_bot_added(CHAT_ID, "CS101", ADMIN_ID)
+    bot = bot_with_member_status("creator")
+    context = make_context(services, bot=bot)
+    update = make_update(
+        make_message("/authorize", user=make_user(NON_ADMIN_ID, username="owner"))
+    )
+
+    asyncio.run(bot_handlers.cmd_authorize(update, context))
+
+    assert services.db.is_group_authorized(CHAT_ID) is True
+    bot.get_chat_member.assert_awaited_once_with(
+        chat_id=CHAT_ID, user_id=NON_ADMIN_ID
+    )
+
+
+def test_group_administrator_can_authorize_via_approve_callback(
+    services: Any,
+) -> None:
+    """A non-configured group administrator may press the Approve button."""
+
+    services.groups.on_bot_added(CHAT_ID, "CS101", ADMIN_ID)
+    bot = bot_with_member_status("administrator")
+    context = make_context(services, bot=bot)
+    update = make_callback_update(NON_ADMIN_ID, f"approve:{CHAT_ID}", bot)
+
+    asyncio.run(bot_handlers.on_approve(update, context))
+
+    assert services.db.is_group_authorized(CHAT_ID) is True
+    assert bot.answer_callback_query.await_args.kwargs["show_alert"] is False
+
+
+def test_ordinary_member_is_still_refused(services: Any) -> None:
+    """Status ``member`` grants no authorization for command or callback."""
+
+    services.groups.on_bot_added(CHAT_ID, "CS101", ADMIN_ID)
+    context = make_context(services, bot=bot_with_member_status("member"))
+    update = make_update(
+        make_message("/authorize", user=make_user(NON_ADMIN_ID, username="member"))
+    )
+
+    asyncio.run(bot_handlers.cmd_authorize(update, context))
+
+    assert services.db.is_group_authorized(CHAT_ID) is False
+
+    services.groups.on_bot_added(OTHER_CHAT_ID, "CS102", ADMIN_ID)
+    callback_bot = bot_with_member_status("member")
+    callback_context = make_context(services, bot=callback_bot)
+    callback_update = make_callback_update(
+        NON_ADMIN_ID, f"approve:{OTHER_CHAT_ID}", callback_bot, chat_id=OTHER_CHAT_ID
+    )
+
+    asyncio.run(bot_handlers.on_approve(callback_update, callback_context))
+
+    assert services.db.is_group_authorized(OTHER_CHAT_ID) is False
+    assert callback_bot.answer_callback_query.await_args.kwargs["show_alert"] is True
+
+
+def test_get_chat_member_failure_is_refused_without_crashing(
+    services: Any,
+) -> None:
+    """A Telegram API error counts as not-admin and never escapes the handler."""
+
+    services.groups.on_bot_added(CHAT_ID, "CS101", ADMIN_ID)
+    bot = make_bot()
+    bot.get_chat_member = AsyncMock(
+        side_effect=RuntimeError("Bad Request: chat not found")
+    )
+    context = make_context(services, bot=bot)
+    update = make_update(
+        make_message("/authorize", user=make_user(NON_ADMIN_ID, username="member"))
+    )
+
+    asyncio.run(bot_handlers.cmd_authorize(update, context))
+
+    assert services.db.is_group_authorized(CHAT_ID) is False
+    assert "administrator" in sent_text(context).lower()
+
+    services.groups.on_bot_added(OTHER_CHAT_ID, "CS102", ADMIN_ID)
+    callback_bot = make_bot()
+    callback_bot.get_chat_member = AsyncMock(side_effect=RuntimeError("timed out"))
+    callback_context = make_context(services, bot=callback_bot)
+    callback_update = make_callback_update(
+        NON_ADMIN_ID, f"approve:{OTHER_CHAT_ID}", callback_bot, chat_id=OTHER_CHAT_ID
+    )
+
+    asyncio.run(bot_handlers.on_approve(callback_update, callback_context))
+
+    assert services.db.is_group_authorized(OTHER_CHAT_ID) is False
+    assert callback_bot.answer_callback_query.await_args.kwargs["show_alert"] is True
+
+
+def test_configured_global_admin_authorizes_even_when_member(services: Any) -> None:
+    """The existing admin allow-list still works regardless of member status."""
+
+    services.groups.on_bot_added(CHAT_ID, "CS101", ADMIN_ID)
+    context = make_context(services, bot=bot_with_member_status("member"))
+    update = make_update(make_message("/authorize", user=make_user(ADMIN_ID)))
+
+    asyncio.run(bot_handlers.cmd_authorize(update, context))
+
+    assert services.db.is_group_authorized(CHAT_ID) is True
+
+
+def test_revoke_command_works_for_group_admin(services: Any) -> None:
+    """A non-configured group creator may revoke consent."""
+
+    authorize(services)
+    context = make_context(services, bot=bot_with_member_status("creator"))
+    update = make_update(
+        make_message("/revoke", user=make_user(NON_ADMIN_ID, username="owner"))
+    )
+
+    asyncio.run(bot_handlers.cmd_revoke(update, context))
+
+    assert services.db.is_group_authorized(CHAT_ID) is False
 
 
 # ---------------------------------------------------------------------------
