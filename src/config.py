@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-"""Bot configuration and database initialization."""
-=======
-=======
->>>>>>> 5dcbce767949b689bd1eb487cd64189cc68a5e3a
 """Central configuration and SQLite storage foundation (SCRUM-38).
 
 This module is the single source of truth for runtime settings and for the
@@ -542,7 +536,3 @@ class Database:
             "ORDER BY remind_at ASC, id ASC",
             (user_id,),
         )
-<<<<<<< HEAD
->>>>>>> 2d01164c5c65fbe09080407175e488694b742d20
-=======
->>>>>>> 5dcbce767949b689bd1eb487cd64189cc68a5e3a

@@ -1,59 +1,3 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-"""Telegram class-group connection handling."""
-from telegram import Update
-from telegram.ext import ContextTypes
-from src.access_control import is_user_group_admin, set_group_authorization
-
-
-async def connect_group_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles /connect or /authorize in a Telegram class group."""
-    chat = update.effective_chat
-    user = update.effective_user
-
-    if not await is_user_group_admin(update):
-        await update.message.reply_text(
-            "🔒 Access Denied (AC5): Only class representatives or group admins can authorize @jumnuybot."
-        )
-        return
-
-    set_group_authorization(
-        group_id=chat.id,
-        group_title=chat.title or f"PrivateChat-{user.id}",
-        group_username=chat.username or "",
-        authorized=True,
-        admin_id=user.id,
-    )
-
-    await update.message.reply_text(
-        f"✅ Class Group Connected!**\n"
-        f"• **Group: {chat.title or 'Direct Chat'}\n"
-        f"• Group ID: `{chat.id}`\n"
-        f"• Status: Authorized for Academic Group Memory (F01).",
-        parse_mode="Markdown",
-    )
-
-
-async def revoke_group_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles /revoke to pause indexing in a class group (AC5 Privacy)."""
-    chat = update.effective_chat
-    user = update.effective_user
-
-    if not await is_user_group_admin(update):
-        await update.message.reply_text("🔒 Only group admins can revoke bot access.")
-        return
-
-    set_group_authorization(
-        group_id=chat.id,
-        group_title=chat.title or "Chat",
-        group_username=chat.username or "",
-        authorized=False,
-        admin_id=user.id,
-    )
-    await update.message.reply_text("⏸️ Group indexing has been paused for privacy (AC5).")
-=======
-=======
->>>>>>> 5dcbce767949b689bd1eb487cd64189cc68a5e3a
 """Telegram group consent flow (SCRUM-31).
 
 JumnuyBot only stores and answers questions about a Telegram group after an
@@ -79,13 +23,15 @@ STATUS_CONSENT_REQUIRED = "consent_required"
 #: Status returned by :meth:`GroupConnector.on_bot_added` for an approved group.
 STATUS_AUTHORIZED = "authorized"
 
-#: Message shown when a group has not yet granted consent (Thai + English).
+#: Message shown when a group has not yet granted consent (Khmer + English).
 CONSENT_PROMPT = (
-    "ขอบคุณที่เพิ่ม JumnuyBot เข้ากลุ่ม "
+    "សូមអរគុណដែលបានបន្ថែម JumnuyBot ចូលក្នុងក្រុម "
     "(Thanks for adding JumnuyBot). "
-    "เพื่อความเป็นส่วนตัว บอทจะยังไม่บันทึกหรือตอบคำถามในกลุ่มนี้ "
-    "จนกว่าผู้ดูแล (admin) จะส่งคำสั่ง /authorize เพื่อยินยอม "
-    "(An admin must send /authorize to grant consent)."
+    "ដើម្បីការពារភាពឯកជន បូតនឹងមិនរក្សាទុក ឬឆ្លើយសំណួរក្នុងក្រុមនេះទេ "
+    "រហូតដល់អ្នកគ្រប់គ្រង (admin) ផ្ញើ /authorize ដើម្បីយល់ព្រម "
+    "(An admin must send /authorize to grant consent). "
+    "ម្ចាស់ក្រុមអាចដកការអនុញ្ញាតបានគ្រប់ពេលដោយ /revoke "
+    "(The group owner can revoke this at any time with /revoke)."
 )
 
 
@@ -123,10 +69,7 @@ class GroupConnector:
             chat_id: Telegram chat identifier the prompt is addressed to.
         """
 
-        return (
-            f"[chat {int(chat_id)}] {CONSENT_PROMPT} "
-            "The group owner can revoke this at any time with /revoke."
-        )
+        return f"[chat {int(chat_id)}] {CONSENT_PROMPT}"
 
     # -- events ------------------------------------------------------------
 
@@ -184,7 +127,8 @@ class GroupConnector:
                 "ok": False,
                 "message": (
                     "Only a configured admin can authorize this group. "
-                    "(เฉพาะผู้ดูแลที่กำหนดไว้เท่านั้นที่อนุญาตได้)"
+                    "(មានតែអ្នកគ្រប់គ្រងដែលបានកំណត់ទេ "
+                    "ទើបអាចអនុញ្ញាតក្រុមនេះបាន។)"
                 ),
             }
 
@@ -223,7 +167,8 @@ class GroupConnector:
                 "ok": False,
                 "message": (
                     "Only a configured admin can revoke consent for this "
-                    "group. (เฉพาะผู้ดูแลที่กำหนดไว้เท่านั้นที่ยกเลิกได้)"
+                    "group. (មានតែអ្នកគ្រប់គ្រងដែលបានកំណត់ទេ "
+                    "ទើបអាចដកសិទ្ធិក្រុមនេះបាន។)"
                 ),
             }
 
@@ -241,7 +186,3 @@ class GroupConnector:
                 "existing messages are kept."
             ),
         }
-<<<<<<< HEAD
->>>>>>> 2d01164c5c65fbe09080407175e488694b742d20
-=======
->>>>>>> 5dcbce767949b689bd1eb487cd64189cc68a5e3a
