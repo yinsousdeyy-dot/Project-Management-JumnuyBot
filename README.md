@@ -46,6 +46,8 @@ python main.py
 
 ## Running the bot
 
+The bot uses long polling, so no webhook or public URL is required.
+
 Install the pinned dependencies, then start the bot with long polling:
 
 ```bash
