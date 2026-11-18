@@ -438,15 +438,21 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _reply(context, chat_id, WELCOME_TEXT)
         return
 
-    authorized = await services.call(services.access.is_authorized_group, chat_id)
-    if authorized:
-        await _reply(context, chat_id, READY_TEXT)
-        return
-
-    prompt = services.groups.consent_prompt(chat_id)
-    await context.bot.send_message(
-        chat_id=chat_id, text=prompt, reply_markup=_approve_keyboard(chat_id)
+    # Route through the idempotent registration path so a group that was added
+    # while the process was down still gets a row; otherwise Approve and
+    # /authorize would refuse forever ("This group is not registered yet").
+    title = getattr(chat, "title", "") or ""
+    result = await services.call(
+        services.groups.on_bot_added, chat_id, title, _sender_id(update) or 0
     )
+    if result.get("status") == "consent_required":
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=str(result.get("message", "")),
+            reply_markup=_approve_keyboard(chat_id),
+        )
+        return
+    await _reply(context, chat_id, READY_TEXT)
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

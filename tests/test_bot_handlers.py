@@ -346,6 +346,67 @@ def test_start_private_upserts_user_and_welcomes(services: Any) -> None:
     assert "/ask" in text and "/today" in text
 
 
+def test_start_in_unregistered_group_registers_it_and_approve_works(
+    services: Any,
+) -> None:
+    """Regression: /start repairs a group added while the bot was offline.
+
+    No ``my_chat_member`` update ever arrives in that scenario, so the group
+    row is missing and both Approve and /authorize used to refuse forever.
+    """
+
+    assert (
+        services.db.query("SELECT 1 FROM groups WHERE chat_id = ?", (CHAT_ID,)) == []
+    )
+
+    context = make_context(services)
+    update = make_update(make_message("/start", user=make_user(STUDENT_ID)))
+
+    asyncio.run(bot_handlers.cmd_start(update, context))
+
+    rows = services.db.query(
+        "SELECT authorized FROM groups WHERE chat_id = ?", (CHAT_ID,)
+    )
+    assert rows and rows[0]["authorized"] == 0
+
+    call = context.bot.send_message.await_args
+    keyboard = call.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[0][0].callback_data == f"approve:{CHAT_ID}"
+
+    # Approving as an admin now really authorizes the group: deadlock gone.
+    bot = make_bot()
+    approve_context = make_context(services, bot=bot)
+    approve_update = make_callback_update(ADMIN_ID, f"approve:{CHAT_ID}", bot)
+
+    asyncio.run(bot_handlers.on_approve(approve_update, approve_context))
+
+    assert services.db.is_group_authorized(CHAT_ID) is True
+    assert bot.answer_callback_query.await_args.kwargs["show_alert"] is False
+
+
+def test_start_in_authorized_group_replies_ready_without_reprompting(
+    services: Any,
+) -> None:
+    """An already-authorized group keeps consent and gets the ready text."""
+
+    authorize(services)
+    first_context = make_context(services)
+
+    asyncio.run(
+        bot_handlers.cmd_start(
+            make_update(make_message("/start", user=make_user(STUDENT_ID))),
+            first_context,
+        )
+    )
+
+    assert services.db.is_group_authorized(CHAT_ID) is True
+    assert bot_handlers.READY_TEXT in sent_text(first_context)
+    assert all(
+        call.kwargs.get("reply_markup") is None
+        for call in first_context.bot.send_message.await_args_list
+    )
+
+
 def test_bot_added_to_group_sends_consent_prompt_and_keyboard(services: Any) -> None:
     """The member update stores the group and offers an Approve button."""
 
