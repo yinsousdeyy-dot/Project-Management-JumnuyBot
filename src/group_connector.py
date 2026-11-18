@@ -23,13 +23,15 @@ STATUS_CONSENT_REQUIRED = "consent_required"
 #: Status returned by :meth:`GroupConnector.on_bot_added` for an approved group.
 STATUS_AUTHORIZED = "authorized"
 
-#: Message shown when a group has not yet granted consent (Thai + English).
+#: Message shown when a group has not yet granted consent (Khmer + English).
 CONSENT_PROMPT = (
-    "ขอบคุณที่เพิ่ม JumnuyBot เข้ากลุ่ม "
+    "សូមអរគុណដែលបានបន្ថែម JumnuyBot ចូលក្នុងក្រុម "
     "(Thanks for adding JumnuyBot). "
-    "เพื่อความเป็นส่วนตัว บอทจะยังไม่บันทึกหรือตอบคำถามในกลุ่มนี้ "
-    "จนกว่าผู้ดูแล (admin) จะส่งคำสั่ง /authorize เพื่อยินยอม "
-    "(An admin must send /authorize to grant consent)."
+    "ដើម្បីការពារភាពឯកជន បូតនឹងមិនរក្សាទុក ឬឆ្លើយសំណួរក្នុងក្រុមនេះទេ "
+    "រហូតដល់អ្នកគ្រប់គ្រង (admin) ផ្ញើ /authorize ដើម្បីយល់ព្រម "
+    "(An admin must send /authorize to grant consent). "
+    "ម្ចាស់ក្រុមអាចដកការអនុញ្ញាតបានគ្រប់ពេលដោយ /revoke "
+    "(The group owner can revoke this at any time with /revoke)."
 )
 
 
@@ -67,10 +69,7 @@ class GroupConnector:
             chat_id: Telegram chat identifier the prompt is addressed to.
         """
 
-        return (
-            f"[chat {int(chat_id)}] {CONSENT_PROMPT} "
-            "The group owner can revoke this at any time with /revoke."
-        )
+        return f"[chat {int(chat_id)}] {CONSENT_PROMPT}"
 
     # -- events ------------------------------------------------------------
 
@@ -128,7 +127,8 @@ class GroupConnector:
                 "ok": False,
                 "message": (
                     "Only a configured admin can authorize this group. "
-                    "(เฉพาะผู้ดูแลที่กำหนดไว้เท่านั้นที่อนุญาตได้)"
+                    "(មានតែអ្នកគ្រប់គ្រងដែលបានកំណត់ទេ "
+                    "ទើបអាចអនុញ្ញាតក្រុមនេះបាន។)"
                 ),
             }
 
@@ -167,7 +167,8 @@ class GroupConnector:
                 "ok": False,
                 "message": (
                     "Only a configured admin can revoke consent for this "
-                    "group. (เฉพาะผู้ดูแลที่กำหนดไว้เท่านั้นที่ยกเลิกได้)"
+                    "group. (មានតែអ្នកគ្រប់គ្រងដែលបានកំណត់ទេ "
+                    "ទើបអាចដកសិទ្ធិក្រុមនេះបាន។)"
                 ),
             }
 
