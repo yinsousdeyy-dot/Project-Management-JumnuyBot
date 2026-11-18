@@ -293,11 +293,12 @@ def test_cache_invalidation_called_after_successful_store(db: Database) -> None:
     ingestor = MessageIngestor(db, cache=cache)
 
     assert ingestor.ingest(CHAT_ID, 20, "hello", ISO_DATE) is not None
-    assert cache.prefixes == [f"chat:{CHAT_ID}"]
+    # Both MessageSearch key scopes must be dropped.
+    assert cache.prefixes == [f"search:{CHAT_ID}:", "search:all:"]
 
     # Duplicates are not stored, so the cache is not invalidated again.
     assert ingestor.ingest(CHAT_ID, 20, "hello", ISO_DATE) is None
-    assert cache.prefixes == [f"chat:{CHAT_ID}"]
+    assert cache.prefixes == [f"search:{CHAT_ID}:", "search:all:"]
 
 
 def test_cache_without_invalidate_is_tolerated(db: Database) -> None:
@@ -306,3 +307,32 @@ def test_cache_without_invalidate_is_tolerated(db: Database) -> None:
 
     assert ingestor.ingest(CHAT_ID, 21, "hello", ISO_DATE) is not None
     assert db.get_message(CHAT_ID, 21) is not None
+
+
+def test_ingestion_invalidates_real_search_cache(db: Database) -> None:
+    """A newly ingested message must appear in an already-populated search."""
+
+    from src.message_search import MessageSearch
+
+    _authorize(db)
+    MessageIngestor(db).ingest(
+        CHAT_ID, 30, "deadline is friday", "2026-11-18T00:00:00+00:00"
+    )
+    search = MessageSearch(db)
+
+    # Populate both the global and chat-scoped caches first.
+    before = search.search("deadline")
+    assert [hit.message.message_id for hit in before] == [30]
+    before_scoped = search.search("deadline", chat_id=CHAT_ID)
+    assert [hit.message.message_id for hit in before_scoped] == [30]
+
+    # Ingest a second matching message through a cache-aware ingestor.
+    MessageIngestor(db, cache=search.cache).ingest(
+        CHAT_ID, 31, "deadline moved to monday", "2026-11-18T01:00:00+00:00"
+    )
+
+    after = search.search("deadline")
+    assert sorted(hit.message.message_id for hit in after) == [30, 31]
+    # The chat-scoped cache must be refreshed too (not served stale).
+    after_scoped = search.search("deadline", chat_id=CHAT_ID)
+    assert sorted(hit.message.message_id for hit in after_scoped) == [30, 31]
