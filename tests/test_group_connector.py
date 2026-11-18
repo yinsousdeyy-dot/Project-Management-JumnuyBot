@@ -16,6 +16,7 @@ CHAT_ID = -1001234567890
 OTHER_CHAT_ID = -1009876543210
 ADMIN_ID = 1
 NON_ADMIN_ID = 42
+GROUP_ADMIN_ID = 77
 
 THAI_RANGE = (0x0E00, 0x0E7F)
 KHMER_RANGE = (0x1780, 0x17FF)
@@ -191,3 +192,82 @@ def test_non_admin_refusals_have_no_thai_characters(
     assert revoke["ok"] is False
     assert _has_chars_in_range(str(authorize["message"]), THAI_RANGE) is False
     assert _has_chars_in_range(str(revoke["message"]), THAI_RANGE) is False
+
+
+# -- group administrators may authorize their own group -------------------
+
+
+def test_group_admin_authorize_enables_group(
+    connector: GroupConnector, db: Database
+) -> None:
+    """A group administrator may authorize the group without being configured."""
+
+    connector.on_bot_added(CHAT_ID, "Class 3A", ADMIN_ID)
+
+    result = connector.on_authorize(
+        CHAT_ID, GROUP_ADMIN_ID, actor_is_group_admin=True
+    )
+
+    assert result["ok"] is True
+    assert db.is_group_authorized(CHAT_ID) is True
+
+
+def test_group_admin_flag_defaults_to_false(
+    connector: GroupConnector, db: Database
+) -> None:
+    """The same non-configured actor is refused when the flag is omitted."""
+
+    connector.on_bot_added(CHAT_ID, "Class 3A", ADMIN_ID)
+
+    result = connector.on_authorize(CHAT_ID, GROUP_ADMIN_ID)
+
+    assert result["ok"] is False
+    assert db.is_group_authorized(CHAT_ID) is False
+
+
+def test_group_admin_revoke_disables_group(
+    connector: GroupConnector, db: Database
+) -> None:
+    """A group administrator may revoke consent for their own group."""
+
+    connector.on_bot_added(CHAT_ID, "Class 3A", ADMIN_ID)
+    connector.on_authorize(CHAT_ID, ADMIN_ID)
+    assert db.is_group_authorized(CHAT_ID) is True
+
+    result = connector.on_revoke(
+        CHAT_ID, GROUP_ADMIN_ID, actor_is_group_admin=True
+    )
+
+    assert result["ok"] is True
+    assert db.is_group_authorized(CHAT_ID) is False
+
+
+def test_group_admin_authorize_unknown_group_is_refused(
+    connector: GroupConnector, db: Database
+) -> None:
+    """Being a group administrator does not bypass the unknown-group refusal."""
+
+    result = connector.on_authorize(
+        OTHER_CHAT_ID, GROUP_ADMIN_ID, actor_is_group_admin=True
+    )
+
+    assert result["ok"] is False
+    assert "not registered" in str(result["message"])
+    assert db.is_group_authorized(OTHER_CHAT_ID) is False
+
+
+def test_group_admin_refusals_are_khmer_not_thai(
+    connector: GroupConnector, db: Database
+) -> None:
+    """Refusals stay bilingual: Khmer present, Thai absent."""
+
+    connector.on_bot_added(CHAT_ID, "Class 3A", ADMIN_ID)
+
+    authorize = connector.on_authorize(CHAT_ID, NON_ADMIN_ID)
+    revoke = connector.on_revoke(CHAT_ID, NON_ADMIN_ID)
+
+    for result in (authorize, revoke):
+        message = str(result["message"])
+        assert result["ok"] is False
+        assert _has_chars_in_range(message, THAI_RANGE) is False
+        assert _has_chars_in_range(message, KHMER_RANGE) is True

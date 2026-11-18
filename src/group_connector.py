@@ -6,7 +6,8 @@ implements that handshake on top of the shared :class:`~src.config.Database`
 and :class:`~src.config.Settings` contracts:
 
 * being added to a group never records messages by itself;
-* only configured admin user ids may authorize or revoke a group;
+* a configured admin user id or one of the group's own Telegram
+  administrators may authorize or revoke a group;
 * revoking consent disables answering but never deletes stored messages.
 
 All methods are offline and synchronous, so they are safe to drive directly
@@ -108,26 +109,35 @@ class GroupConnector:
             "message": self.consent_prompt(chat_id),
         }
 
-    def on_authorize(self, chat_id: int, actor_id: int) -> dict[str, object]:
+    def on_authorize(
+        self,
+        chat_id: int,
+        actor_id: int,
+        *,
+        actor_is_group_admin: bool = False,
+    ) -> dict[str, object]:
         """Grant consent for a group when requested by an administrator.
 
         Args:
             chat_id: Telegram chat identifier of the group.
             actor_id: Telegram user id of the requester.
+            actor_is_group_admin: Whether Telegram reports the requester as a
+                creator or administrator of this group.
 
         Returns:
-            ``{"ok": True, "message": str}`` on success. A non-admin actor or
-            a group that was never registered yields ``{"ok": False, ...}``;
-            an unknown group must be added through the bot first so that
-            consent is always tied to a real chat record.
+            ``{"ok": True, "message": str}`` on success. An actor who is
+            neither a configured admin nor a group administrator, or a group
+            that was never registered, yields ``{"ok": False, ...}``; an
+            unknown group must be added through the bot first so that consent
+            is always tied to a real chat record.
         """
 
-        if not self._is_admin(actor_id):
+        if not self._is_admin(actor_id) and not actor_is_group_admin:
             return {
                 "ok": False,
                 "message": (
-                    "Only a configured admin can authorize this group. "
-                    "(មានតែអ្នកគ្រប់គ្រងដែលបានកំណត់ទេ "
+                    "Only a group administrator can authorize this group. "
+                    "(មានតែអ្នកគ្រប់គ្រងក្រុម ឬអ្នកគ្រប់គ្រងបូតទេ "
                     "ទើបអាចអនុញ្ញាតក្រុមនេះបាន។)"
                 ),
             }
@@ -150,24 +160,32 @@ class GroupConnector:
             ),
         }
 
-    def on_revoke(self, chat_id: int, actor_id: int) -> dict[str, object]:
+    def on_revoke(
+        self,
+        chat_id: int,
+        actor_id: int,
+        *,
+        actor_is_group_admin: bool = False,
+    ) -> dict[str, object]:
         """Revoke consent for a group without deleting stored messages.
 
         Args:
             chat_id: Telegram chat identifier of the group.
             actor_id: Telegram user id of the requester.
+            actor_is_group_admin: Whether Telegram reports the requester as a
+                creator or administrator of this group.
 
         Returns:
             ``{"ok": True, "message": str}`` on success, otherwise
             ``{"ok": False, ...}``. Messages are intentionally left intact.
         """
 
-        if not self._is_admin(actor_id):
+        if not self._is_admin(actor_id) and not actor_is_group_admin:
             return {
                 "ok": False,
                 "message": (
-                    "Only a configured admin can revoke consent for this "
-                    "group. (មានតែអ្នកគ្រប់គ្រងដែលបានកំណត់ទេ "
+                    "Only a group administrator can revoke consent for this "
+                    "group. (មានតែអ្នកគ្រប់គ្រងក្រុម ឬអ្នកគ្រប់គ្រងបូតទេ "
                     "ទើបអាចដកសិទ្ធិក្រុមនេះបាន។)"
                 ),
             }
