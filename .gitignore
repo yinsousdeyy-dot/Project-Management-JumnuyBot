@@ -1,0 +1,28 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Private source material (contains a live credential; never commit)
+docx/
+
+# Distribution and packaging
+.dist/
+build/
+dist/
+
+# OS and editor noise
+.DS_Store
